@@ -1,5 +1,6 @@
 const userModel = require('../model/userModel');
 const bcrypt = require('bcrypt');
+
 async function registerUser(req, res) {
   try {
     const { name, email, password, roles, assignedProjects } = req.body;
@@ -9,7 +10,7 @@ async function registerUser(req, res) {
       return res.status(400).json({ error: 'Email Already in Use' });
     }
     // hashpassword
-    const hashpassword = await bcrypt.hash(password, 10);
+    const hashpassword = await bcrypt.hash(password, 1000);
     let user = await userModel.create({
       name,
       email,

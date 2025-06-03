@@ -14,8 +14,9 @@ async function verifyOpt(req, res) {
   if (!user || user.otp !== otp) {
     return res.status(403).json({ error: 'Invalid OTP' });
   }
-  user.otp = null;
-
+  if (user.expiresAt < new Date()) {
+    return res.status(400).json({ message: 'OTP has expired' });
+  }
   const accessToken = generateAccessToken(loginUser);
   const refreshToken = generateRefreshToken(loginUser);
 

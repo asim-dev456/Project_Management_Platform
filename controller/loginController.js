@@ -1,7 +1,7 @@
 const userModel = require('../model/userModel');
 const bcrypt = require('bcrypt');
-
 const transporter = require('../utils/nodeMailer.js');
+
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -23,7 +23,7 @@ async function loginUser(req, res) {
       await otpModel.create({
         email,
         otp: generatedOtp,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 1 * 60 * 1000),
       });
       await transporter.sendMail({
         from: process.env.EMAIL,

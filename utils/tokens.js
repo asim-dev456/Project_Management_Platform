@@ -4,7 +4,7 @@ function generateAccessToken(user) {
     { id: user._id, roles: user.roles },
     process.env.ACCESS_SECRET,
     {
-      expiresIn: '15m',
+      expiresIn: '2d',
     }
   );
 }
@@ -13,7 +13,7 @@ function generateRefreshToken(user) {
     { id: user._id, roles: user.roles },
     process.env.REFRESH_SECRET,
     {
-      expiresIn: '7d',
+      expiresIn: '2d',
     }
   );
 }

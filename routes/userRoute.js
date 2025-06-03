@@ -9,6 +9,12 @@ const verifyOpt = require('../controller/otpVerificationController.js');
 
 const tokenRefresh = require('../controller/refreshTokenController.js');
 const logOut = require('../controller/logOutController.js');
+const {
+  users,
+  createUser,
+  updateUser,
+  deleteUser,
+} = require('../controller/usersController.js');
 const router = express.Router();
 
 router.post('/register', registerUser);
@@ -22,7 +28,20 @@ router.get(
   adminDashBoard
 );
 router.get('/profile/:id', authenticateToken, userProfile);
-
+router.get('/users', authenticateToken, authorizeRoles('admin'), users);
+router.post('/create', authenticateToken, authorizeRoles('admin'), createUser);
+router.put(
+  '/update/:id',
+  authenticateToken,
+  authorizeRoles('admin'),
+  updateUser
+);
+router.delete(
+  '/delete/:id',
+  authenticateToken,
+  authorizeRoles('admin'),
+  deleteUser
+);
 router.post('/refresh-token', tokenRefresh);
 router.post('/verify-otp', verifyOpt);
 module.exports = router;
