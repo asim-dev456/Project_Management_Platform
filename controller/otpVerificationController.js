@@ -1,34 +1,23 @@
-const otpModel = require('../model/otpModel');
-const refreshTokenModel = require('../model/refreashTokenModel');
-const userModel = require('../model/userModel');
-const {
-  generateAccessToken,
-  generateRefreshToken,
-} = require('../utils/tokens');
+const { verifyOtpService } = require('../services/otpVerificationService');
 
 async function verifyOpt(req, res) {
-  const { email, otp } = req.body;
-
-  const user = await otpModel.findOne({ email });
-  const loginUser = await userModel.findOne({ email });
-  if (!user || user.otp !== otp) {
-    return res.status(403).json({ error: 'Invalid OTP' });
+  try {
+    let result = await verifyOtpService(req.body);
+    res
+      .cookie('token', result.accessToken, { httpOnly: true })
+      .cookie('refreshToken', result.refreshToken, { httpOnly: true })
+      .json({
+        message: '2FA login successful',
+        accessToken: result.accessToken,
+      });
+  } catch (error) {
+    if (error.message === 'Invalid OTP') {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.message === 'OTP has expired') {
+      return res.status(403).json({ error: error.message });
+    }
+    res.status(400).json({ error: 'Error Verifing OTP' });
   }
-  if (user.expiresAt < new Date()) {
-    return res.status(400).json({ message: 'OTP has expired' });
-  }
-  const accessToken = generateAccessToken(loginUser);
-  const refreshToken = generateRefreshToken(loginUser);
-
-  //store refresh token in db
-  await refreshTokenModel.create({
-    userId: loginUser._id,
-    token: refreshToken,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
-  res
-    .cookie('token', accessToken, { httpOnly: true })
-    .cookie('refreshToken', refreshToken, { httpOnly: true })
-    .json({ message: '2FA login successful', accessToken });
 }
-module.exports = verifyOpt;
+module.exports = { verifyOpt };
