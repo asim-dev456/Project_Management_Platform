@@ -6,6 +6,7 @@ const {
   createTaskService,
   deleteTaskService,
   updateTaskService,
+  uploadTaskAttachmentService,
 } = require('../services/projectAndTaskService');
 
 async function createProject(req, res) {
@@ -53,10 +54,12 @@ async function projectList(req, res) {
 // Tasks
 async function createTask(req, res) {
   try {
-    await createTaskService(req.body);
+    const files = req.files;
+    await createTaskService(req.body, files);
     res.status(201).json({ message: 'Task Created and Assigned' });
   } catch (error) {
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error('Task creation error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
@@ -88,6 +91,22 @@ async function deleteTask(req, res) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
+async function uploadAttachmentController(req, res) {
+  try {
+    const taskId = req.params.id;
+    const files = req.files;
+
+    await uploadTaskAttachmentService(taskId, files);
+
+    res.status(200).json({ message: 'Attachments uploaded successfully' });
+  } catch (error) {
+    if (error.message === 'Task not Exists') {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
 module.exports = {
   createProject,
   deleteProject,
@@ -96,4 +115,5 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
+  uploadAttachmentController,
 };

@@ -1,5 +1,7 @@
 const projectModel = require('../model/projectModel');
 const taskModel = require('../model/taskModel');
+const path = require('path');
+const fs = require('fs/promises');
 
 async function createProjectService({
   title,
@@ -42,19 +44,25 @@ async function projectListService() {
   let projects = await projectModel.find();
   return projects;
 }
-async function createTaskService({
-  title,
-  description,
-  status,
-  project,
-  assignedTo,
-}) {
+async function createTaskService(
+  { title, description, status, project, assignedTo },
+  attachments
+) {
+  const uploadFolder = path.join(__dirname, '../uploads');
+  const savedFiles = [];
+  for (const file of attachments) {
+    const fileName = `${Date.now()}-${file.originalname}`;
+    const fullPath = path.join(uploadFolder, fileName);
+    await fs.writeFile(fullPath, file.buffer);
+    savedFiles.push(`/uploads/${fileName}`);
+  }
   await taskModel.create({
     title,
     description,
     status,
     project,
     assignedTo,
+    attachments: savedFiles,
   });
 }
 async function updateTaskService({ status, ...others }, id) {
@@ -69,6 +77,23 @@ async function updateTaskService({ status, ...others }, id) {
     status,
   });
 }
+async function uploadTaskAttachmentService(taskId, files) {
+  const task = await taskModel.findById(taskId);
+  if (!task) {
+    throw new Error('Task not Exists');
+  }
+  const uploadFolder = path.join(__dirname, '../uploads');
+  const savedFiles = [];
+  for (const file of files) {
+    const fileName = `${Date.now()}-${file.originalname}`;
+    const fullPath = path.join(uploadFolder, fileName);
+    await fs.writeFile(fullPath, file.buffer);
+    savedFiles.push(`/uploads/${fileName}`);
+  }
+  task.attachments.push(...savedFiles);
+  await task.save();
+}
+
 async function deleteTaskService(id) {
   let checkId = await taskModel.findOne({ _id: id });
   if (!checkId) {
@@ -87,4 +112,5 @@ module.exports = {
   createTaskService,
   updateTaskService,
   deleteTaskService,
+  uploadTaskAttachmentService,
 };
