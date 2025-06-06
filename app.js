@@ -46,6 +46,7 @@ app.use(cookieParser(process.env.PRIVATE));
 app.use('/uploads', express.static('uploads'));
 app.use('/api', userRouter);
 swaggerDocs(app);
+
 app.use(errorHandler);
 (async () => {
   await connectDB();

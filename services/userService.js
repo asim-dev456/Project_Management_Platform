@@ -1,13 +1,13 @@
 const userModel = require('../model/userModel');
 const taskModel = require('../model/taskModel');
 const refreshTokenModel = require('../model/refreashTokenModel');
-const otpModel = require('../model/otpModel.js');
 const bcrypt = require('bcrypt');
 const transporter = require('../utils/nodeMailer.js');
 const {
   generateAccessToken,
   generateRefreshToken,
 } = require('../utils/tokens');
+const redisClient = require('../config/redisServer.js');
 
 //register user
 async function registerUserService({ name, email, password, roles }) {
@@ -28,35 +28,37 @@ async function registerUserService({ name, email, password, roles }) {
 }
 
 // login user
+
 async function loginUserService({ email, password }) {
   let user = await userModel.findOne({ email });
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new Error('Wrong Email or Password');
   }
+
   let generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
   if (user.roles === 'admin') {
-    await otpModel.deleteMany({ email });
-    await otpModel.create({
-      email,
-      otp: generatedOtp,
-      expiresAt: new Date(Date.now() + 1 * 60 * 1000),
-    });
+    await redisClient.setEx(`otp:${email}`, 60, generatedOtp);
+
     await transporter.sendMail({
       from: process.env.EMAIL,
       to: user.email,
       subject: 'Your OTP',
       text: `Your login OTP is ${generatedOtp}`,
     });
+
     return { otpSent: true };
   }
+
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
-  //store refresh token in db
+
   await refreshTokenModel.create({
     userId: user._id,
     token: refreshToken,
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
+
   return { userId: user._id, accessToken, refreshToken };
 }
 
@@ -101,27 +103,44 @@ async function patchUserService({ assignedProjects }, id) {
 }
 
 // admin Dashboard
-async function adminDashBoardService(req, res) {
-  let usersData = await userModel
-    .find()
-    .select('-password -_id -__v')
-    .populate({
-      path: 'assignedProjects',
-      select: '-_id -__v',
 
-      populate: [
-        { path: 'createdby', select: 'name email -_id ' },
-        { path: 'assignedUsers', select: 'name email -_id' },
-      ],
-    });
-  let taskData = await taskModel
-    .find()
-    .select('-password -_id -__v')
-    .populate([
-      { path: 'project', select: 'title description -_id' },
-      { path: 'assignedTo', select: 'name email -_id' },
-    ]);
-  return { usersData, taskData };
+async function adminDashBoardService() {
+  try {
+    const cached = await redisClient.get('dashboardData');
+    if (cached) {
+      console.log('Serving from cache');
+      return JSON.parse(cached);
+    }
+
+    let usersData = await userModel
+      .find()
+      .select('-password -_id -__v')
+      .populate({
+        path: 'assignedProjects',
+        select: '-_id -__v',
+        populate: [
+          { path: 'createdby', select: 'name email -_id' },
+          { path: 'assignedUsers', select: 'name email -_id' },
+        ],
+      });
+
+    let taskData = await taskModel
+      .find()
+      .select('-_id -__v')
+      .populate([
+        { path: 'project', select: 'title description -_id' },
+        { path: 'assignedTo', select: 'name email -_id' },
+      ]);
+
+    const dashboardData = { usersData, taskData };
+
+    await redisClient.setEx('dashboardData', 30, JSON.stringify(dashboardData));
+
+    return dashboardData;
+  } catch (error) {
+    console.error('Error in adminDashBoardService:', error);
+    throw error;
+  }
 }
 
 module.exports = {
