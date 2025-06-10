@@ -22,7 +22,6 @@ async function registerUserService({ name, email, password, roles }) {
     email,
     password: hashedpassword,
     roles,
-    assignedProjects,
   });
   return user;
 }

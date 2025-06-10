@@ -35,7 +35,9 @@ async function loginUser(req, res) {
   try {
     const result = await loginUserService(req.body);
     if (result.otpSent) {
-      return res.json({ message: 'OTP sent to email. Use /verify-otp' });
+      return res.json({
+        message: 'OTP sent to email. Use /api/auth/verify-otp',
+      });
     }
     res
       .cookie('token', result.accessToken, { httpOnly: true })

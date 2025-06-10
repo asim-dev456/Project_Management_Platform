@@ -54,3 +54,4 @@ app.use(errorHandler);
     console.log(`Server Started at http://localhost:${process.env.PORT}`);
   });
 })();
+module.exports = app;
