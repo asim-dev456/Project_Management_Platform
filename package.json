@@ -5,10 +5,12 @@
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
     "test": "jest",
-    "start": "nodemon app.js"
+    "test:coverage": "jest --coverage",
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -30,7 +32,6 @@
     "redis": "^5.5.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "uuid": "^11.1.0",
     "xss": "^1.0.15",
     "xss-clean": "^0.1.4"
   },

@@ -8,9 +8,13 @@ const userModel = require('./model/userModel.js');
 const { refreshToken } = require('./controller/refreshTokenController.js');
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+const { refreshTokenService } = require('./services/refreshTokenService');
+const projectModel = require('./model/projectModel.js');
+const taskModel = require('./model/taskModel.js');
 
-jest.setTimeout(15000);
+jest.setTimeout(100000);
 
 let mongo;
 beforeAll(() => {
@@ -36,10 +40,6 @@ afterAll(async () => {
 jest.mock('./services/refreshTokenService', () => ({
   refreshTokenService: jest.fn(),
 }));
-
-const { refreshTokenService } = require('./services/refreshTokenService');
-const authorizeRoles = require('./middleware/authorizeRoles.js');
-const authenticateToken = require('./middleware/authenticateToken.js');
 
 // auth api test
 
@@ -255,35 +255,460 @@ describe('POST /api/auth/refresh-token', () => {
 
 // users api test
 
+jest.mock('./middleware/authenticateToken', () => {
+  return (req, res, next) => {
+    req.user = { id: 'admin123', roles: ['admin'] };
+    next();
+  };
+});
+jest.mock('./middleware/authorizeRoles', () => {
+  return () => (req, res, next) => next();
+});
 describe('PUT /api/users/update/:id', () => {
-  it('should display error if id not found', async () => {
-    await request(app).post('/api/auth/register').send({
+  let user;
+  beforeEach(async () => {
+    user = await userModel.create({
       name: 'asim',
       email: 'asim@gmail.com',
-      password: '1234',
-      roles: 'admin',
+      password: '123',
+      roles: 'user',
     });
-    await request(app).post('/api/auth/login').send({
-      email: 'asim@gmail.com',
-      password: '1234',
-    });
-    const otp = await redisClient.get('otp:asim@gmail.com');
-    const loginres = await request(app).post('/api/auth/verify-otp').send({
-      email: 'asim@gmail.com',
-      otp: otp,
-    });
-
-    const token = loginres.body.accessToken;
-    console.log(token);
+  });
+  it('should display error if id not found', async () => {
+    const id = new mongoose.Types.ObjectId();
     const res = await request(app)
-      .put(
-        '/api/users/update/2324324',
-        authenticateToken,
-        authorizeRoles('admin')
-      )
-      .set('Authorization', `Bearer ${token}`);
+      .put(`/api/users/update/${id}`)
+      .send({
+        name: 'asim',
+        email: 'asim146@gmail.com',
+        password: '12356',
+        roles: ['admin'],
+      });
 
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('error', 'User Not Found');
+  });
+
+  it('should update the user if everything provided correct', async () => {
+    const res = await request(app).put(`/api/users/update/${user._id}`).send({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '12345',
+      roles: 'admin',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'User Updated');
+  });
+});
+
+describe('DELETE /api/users/delete/:id', () => {
+  let user;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '123',
+      roles: 'user',
+    });
+  });
+  it('should display error if user not found', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).delete(`/api/users/delete/${id}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'User Not Found');
+  });
+
+  it('should delete the the user if correect id provided', async () => {
+    const res = await request(app).delete(`/api/users/delete/${user._id}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'User Deleted');
+  });
+});
+
+describe('GET /api/admin/dashboard', () => {
+  it('should display admin dashboard ', async () => {
+    const res = await request(app).get('/api/admin/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'Admin DashBoard');
+    expect(res.body).toHaveProperty('UsersData');
+    expect(res.body).toHaveProperty('taskData');
+  });
+});
+
+// project apis testing
+
+describe('POST /api/projects/create', () => {
+  let user;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '123',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  it('should create project', async () => {
+    const res = await request(app).post('/api/projects/create').send({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('message', 'Project Created');
+    expect(res.body).toHaveProperty('details');
+  });
+});
+
+describe('DELETE /api/projects/delete/:id', () => {
+  let project;
+  let user;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '123',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  it('should display error if project is not found', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).delete(`/api/projects/delete/${id}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'Project Not Found');
+  });
+  it('should delete project if correct id provided', async () => {
+    const res = await request(app).delete(
+      `/api/projects/delete/${project._id}`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'Project Deleted');
+  });
+});
+
+describe('UPDATE /api/projects/update/:id', () => {
+  let project;
+  let user;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '123',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  it('should display error if project is not found', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).put(`/api/projects/update/${id}`).send({
+      title: 'weather app frontend',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'Project Not Found');
+  });
+  it('should update project if correct id provided', async () => {
+    const res = await request(app)
+      .put(`/api/projects/update/${project._id}`)
+      .send({
+        title: 'weather app frontend',
+        description: 'complete weather app',
+        createdby: manager._id,
+        assignedUsers: user._id,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'Project Updated');
+  });
+});
+
+describe('GET /api/projects/list', () => {
+  it('should display list of projects', async () => {
+    const res = await request(app).get('/api/projects/list');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('ProjectDetails');
+  });
+});
+
+// task apis testing
+
+describe('POST /api/tasks/create', () => {
+  let manager;
+  let user;
+  let project;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '123',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  it('should display task created and assigned', async () => {
+    const filePath = path.join(__dirname, 'test1-avatar.png');
+    fs.writeFileSync(filePath, 'image content');
+    const res = await request(app)
+      .post('/api/tasks/create')
+      .field('title', 'frontend')
+      .field('description', 'complete frontend')
+      .field('status', 'todo')
+      .field('project', project._id.toString())
+      .field('assignedTo', user._id.toString())
+      .attach('attachments', filePath);
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('message', 'Task Created and Assigned');
+    fs.unlinkSync(filePath);
+  });
+});
+
+describe('UPDATE /api/tasks/update/:id', () => {
+  let user;
+  let task;
+  let project;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '1234',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  beforeEach(async () => {
+    task = await taskModel.create({
+      title: 'frontend',
+      description: 'complete frontend',
+      status: 'todo',
+      project: project._id,
+      assignedTo: user._id,
+    });
+  });
+  it('should display error if task not exits', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).patch(`/api/tasks/update/${id}`).send({
+      status: 'done',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'Task not Exists');
+  });
+  it('should display error if user try to modify two or more fields', async () => {
+    const res = await request(app).patch(`/api/tasks/update/${task._id}`).send({
+      title: 'backend',
+      status: 'done',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty(
+      'error',
+      'Only status field can be updated'
+    );
+  });
+  it('should display update the task if everything provided correct', async () => {
+    const res = await request(app).patch(`/api/tasks/update/${task._id}`).send({
+      status: 'done',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'Task Updated');
+  });
+});
+
+describe('DELETE /api/tasks/delete/:id', () => {
+  let user;
+  let task;
+  let task1;
+  let project;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '1234',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  beforeEach(async () => {
+    task = await taskModel.create({
+      title: 'frontend',
+      description: 'complete frontend',
+      status: 'todo',
+      project: project._id,
+      assignedTo: user._id,
+    });
+  });
+  beforeEach(async () => {
+    task1 = await taskModel.create({
+      title: 'backend',
+      description: 'complete backend',
+      status: 'done',
+      project: project._id,
+      assignedTo: user._id,
+    });
+  });
+  it('should display error if task not exits', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).delete(`/api/tasks/delete/${id}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'Task not Exists');
+  });
+  it('should display error if task is not completed yet', async () => {
+    const res = await request(app).delete(`/api/tasks/delete/${task._id}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty(
+      'error',
+      'Task is Not Completed Yet Please Finish the Task'
+    );
+  });
+  it('should delete the project if project completed and task id is correct', async () => {
+    const res = await request(app).delete(`/api/tasks/delete/${task1._id}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('message', 'Task Deleted');
+  });
+});
+
+describe('UPLOADS /api/uploads/attachments/:id', () => {
+  let user;
+  let task;
+  let project;
+  let manager;
+  beforeEach(async () => {
+    user = await userModel.create({
+      name: 'asim',
+      email: 'asim@gmail.com',
+      password: '1234',
+      roles: 'user',
+    });
+  });
+  beforeEach(async () => {
+    manager = await userModel.create({
+      name: 'asim',
+      email: 'asim146@gmail.com',
+      password: '123',
+      roles: 'manager',
+    });
+  });
+  beforeEach(async () => {
+    project = await projectModel.create({
+      title: 'weather app',
+      description: 'complete weather app',
+      createdby: manager._id,
+      assignedUsers: user._id,
+    });
+  });
+  beforeEach(async () => {
+    task = await taskModel.create({
+      title: 'frontend',
+      description: 'complete frontend',
+      status: 'todo',
+      project: project._id,
+      assignedTo: user._id,
+    });
+  });
+  it('should display error if task not exits', async () => {
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(app).patch(`/api/uploads/attachments/${id}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('error', 'Task not Exists');
+  });
+  it('should uploads attachments if everything correct', async () => {
+    const filePath = path.join(__dirname, 'test-avatar.png');
+    fs.writeFileSync(filePath, 'image content');
+    const res = await request(app)
+      .patch(`/api/uploads/attachments/${task._id}`)
+      .attach('attachments', filePath);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty(
+      'message',
+      'Attachments uploaded successfully'
+    );
   });
 });

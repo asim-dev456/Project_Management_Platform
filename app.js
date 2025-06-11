@@ -18,13 +18,14 @@ const writeStream = fs.createWriteStream(path.join(__dirname, 'access.log'), {
   flags: 'a',
 });
 const app = express();
-
+app.set('trust proxy', 1);
 // helmet
 app.use(helmet());
 
 // enable cors
 app.use(
   cors({
+    origin: 'https://project-management-platform-production.up.railway.app',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   })
